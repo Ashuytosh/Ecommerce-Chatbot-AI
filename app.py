@@ -1,22 +1,37 @@
 # === app.py ===
-import os
-import re
-import json
-import time
-import requests
-import duckdb
+#import os
+#import re
+#import json
+#import time
+#import requests
+#import duckdb
+#import streamlit as st
+#import pandas as pd
+#from dotenv import load_dotenv
+#from langchain_google_genai import ChatGoogleGenerativeAI
+#from langchain_community.utilities import SQLDatabase
+#from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+#from langchain_community.agent_toolkits.sql.base import create_sql_agent
+#try:
+    #from langchain.memory import ConversationBufferMemory
+#except ImportError:
+    #from langchain_community.memory import ConversationBufferMemory
+#from langchain.memory.chat_message_histories import SQLChatMessageHistory
+
+
+
 import streamlit as st
-import pandas as pd
+import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.utilities import SQLDatabase
-from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
-try:
-    from langchain.memory import ConversationBufferMemory
-except ImportError:
-    from langchain_community.memory import ConversationBufferMemory
-from langchain.memory.chat_message_histories import SQLChatMessageHistory
+from langchain_core.memory import ConversationBufferMemory
+from langchain_core.memory.chat_message_histories import SQLChatMessageHistory
+from langchain.schema import messages_from_dict, messages_to_dict
+from langchain_community.agent_toolkits import create_sql_agent
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain_community.llms import OpenAI
 
 # === Load API Keys ===
 load_dotenv()
