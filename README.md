@@ -182,7 +182,17 @@ Here’s the detailed **end-to-end architecture** of the chatbot:
 
 ## 🖼️ Output Screenshots
 
-*(📸 To be added soon — will include Basic Chat and Visualization outputs)*
+Below are some visual examples of how the chatbot works in both **Basic Chat Mode** and **Visualization Chat Mode**.
+
+### 💬 Basic Chat
+This section shows how the chatbot responds to analytical queries using the SQL reasoning agent.
+
+![Basic Chat Screenshot](Output_Screenshots/Basic_Chat.png)
+
+### 📊 Visualization Chat
+This section demonstrates the chatbot’s visualization mode, where it generates charts dynamically using QuickChart.
+
+![Visualization Chat Screenshot](Output_Screenshots/Vizualization_Chat.png)
 
 ---
 
