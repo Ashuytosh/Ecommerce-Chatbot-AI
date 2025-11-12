@@ -4,11 +4,10 @@ An intelligent **E-commerce Data Analysis and Visualization Chatbot** built usin
 This chatbot allows natural language interaction with structured E-commerce datasets, providing **insights, SQL-based analysis**, and **auto-generated visualizations**.
 
 ---
-## 🧠 How to Open / Run the Project
+## How to Open / Run the Project
 
 Follow the steps below to install, configure, and launch the **E-Commerce Chatbot AI** on your local machine.
 
-```bash
 # 1️ Clone the Repository
 git clone https://github.com/Ashuytosh/Ecommerce-Chatbot-AI.git
 cd Ecommerce-Chatbot-AI
