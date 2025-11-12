@@ -4,6 +4,35 @@ An intelligent **E-commerce Data Analysis and Visualization Chatbot** built usin
 This chatbot allows natural language interaction with structured E-commerce datasets, providing **insights, SQL-based analysis**, and **auto-generated visualizations**.
 
 ---
+## 🧠 How to Open / Run the Project
+
+Follow the steps below to install, configure, and launch the **E-Commerce Chatbot AI** on your local machine.
+
+```bash
+# 1️ Clone the Repository
+git clone https://github.com/Ashuytosh/Ecommerce-Chatbot-AI.git
+cd Ecommerce-Chatbot-AI
+
+# 2️ Create and Activate a Virtual Environment
+# For Windows:
+python -m venv .venv
+.venv\Scripts\activate
+
+# For macOS / Linux:
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3️ Install Required Dependencies
+pip install -r requirements.txt
+
+# 4️ Create a .env File (for API Keys)
+# Inside the project folder, create a file named .env and add:
+GOOGLE_API_KEY=your_basic_chat_api_key
+GOOGLE_API_KEY_VIZ=your_visualization_api_key
+
+# 5 Run the Streamlit App
+streamlit run app.py
+
 
 ## 📊 Dataset Overview
 
