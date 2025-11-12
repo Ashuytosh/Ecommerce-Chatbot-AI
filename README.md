@@ -8,30 +8,45 @@ This chatbot allows natural language interaction with structured E-commerce data
 
 Follow the steps below to install, configure, and launch the **E-Commerce Chatbot AI** on your local machine.
 
-# 1️ Clone the Repository
+```bash
+### 1️ Clone the Repository
 git clone https://github.com/Ashuytosh/Ecommerce-Chatbot-AI.git
 cd Ecommerce-Chatbot-AI
 
-# 2️ Create and Activate a Virtual Environment
-# For Windows:
+```
+```bash
+### 2️ Create and Activate a Virtual Environment
+### For Windows:
 python -m venv .venv
 .venv\Scripts\activate
 
-# For macOS / Linux:
+```
+
+```bash
+### For macOS / Linux:
 python3 -m venv .venv
 source .venv/bin/activate
+```
 
-# 3️ Install Required Dependencies
+```bash
+### 3️ Install Required Dependencies
 pip install -r requirements.txt
 
-# 4️ Create a .env File (for API Keys)
-# Inside the project folder, create a file named .env and add:
+```
+
+```bash
+### 4️ Create a .env File (for API Keys)
+### Inside the project folder, create a file named .env and add:
 GOOGLE_API_KEY=your_basic_chat_api_key
 GOOGLE_API_KEY_VIZ=your_visualization_api_key
 
-# 5 Run the Streamlit App
+```
+
+```bash
+### 5 Run the Streamlit App
 streamlit run app.py
 
+```
 
 ## 📊 Dataset Overview
 
