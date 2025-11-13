@@ -120,7 +120,7 @@ def load_recent_messages(session_id: str, limit: int = 10):
 # === Setup Agent Functions (we DO NOT pass a LangChain Memory object) ===
 def setup_agent_basic(db_path):
     os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "hidden_key_basic")
-    db = SQLDatabase.from_uri(f"duckdb:///{db_path}", sample_rows_in_table_info=1)
+    db = SQLDatabase.from_uri(f"duckdb_engine:///{db_path}", sample_rows_in_table_info=1)
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", temperature=0.2)
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
     prefix = """
@@ -138,7 +138,7 @@ The final output must begin with 'Final Answer:' followed by plain text.
 
 def setup_agent_viz(db_path):
     os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY_VIZ", "hidden_key_basics")
-    db = SQLDatabase.from_uri(f"duckdb:///{db_path}", sample_rows_in_table_info=1)
+    db = SQLDatabase.from_uri(f"duckdb_engine:///{db_path}", sample_rows_in_table_info=1)
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", temperature=0.2)
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
     prefix = """
@@ -157,7 +157,7 @@ Always follow ReAct reasoning structure. Final output must begin with 'Final Ans
 # ===============================
 if mode == "🧠 Basic Chat":
     st.markdown("### 💬 Ask your data analysis questions below")
-    agent_basic = setup_agent_basic("D:/Agentic_AI/Dataset/ecommerce_clean.duckdb")
+    agent_basic = setup_agent_basic("Dataset/ecommerce_clean.duckdb")
     session_id = "user_1"
 
     # Dataset dropdown
@@ -257,7 +257,7 @@ Please answer and if you run SQL, include queries and outputs in your chain-of-t
 # ===============================
 else:
     st.markdown("### 📊 Ask for visualizations and insights")
-    agent_viz = setup_agent_viz("D:/Agentic_AI/Dataset/ecommerce_file.duckdb")
+    agent_viz = setup_agent_viz("ecommerce_file.duckdb")
     session_id_viz = "user_1_viz"
 
     st.sidebar.markdown("### 📁 Available Charts")
