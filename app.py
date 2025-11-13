@@ -13,15 +13,9 @@ from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
 # === Memory Imports (Full Compatibility) ===
-try:
-    from langchain.memory import ConversationBufferMemory
-except ImportError:
-    from langchain_community.memory import ConversationBufferMemory
-
-try:
-    from langchain.memory.chat_message_histories import SQLChatMessageHistory
-except ImportError:
-    from langchain_community.memory.chat_message_histories import SQLChatMessageHistory
+# === Memory Imports (Streamlit-Safe Versions) ===
+from langchain.memory import ConversationBufferMemory
+from langchain_community.chat_message_histories import SQLChatMessageHistory
 
 
 
