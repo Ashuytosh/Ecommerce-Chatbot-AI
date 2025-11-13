@@ -3,6 +3,7 @@ import os
 import re
 import json
 import time
+import sqlite3
 import requests
 import duckdb
 import streamlit as st
@@ -12,20 +13,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
-# === Memory Imports (Full Compatibility) ===
-# === Memory Imports (Streamlit-Safe Versions) ===
-# === Memory Imports (Compatible with LangChain 0.3+) ===
-from langchain_community.memory import ConversationBufferMemory
-from langchain_community.chat_message_histories import SQLChatMessageHistory
 
+# === Remove broken memory imports (we use our own SQLite memory) ===
 
 # === Load API Keys ===
 load_dotenv()
-
-# Basic Chat API Key
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "hidden_key_basic")
-
-# Visualization API Key
 os.environ["GOOGLE_API_KEY_VIZ"] = os.getenv("GOOGLE_API_KEY_VIZ", "hidden_key_basics")
 
 # === Streamlit Setup ===
@@ -39,16 +32,8 @@ h1, h3 { color: #1976d2; text-align: center; font-weight: 700; }
 .summary-text { color: #0277bd; font-style: italic; font-weight: 600; }
 .thinking { color: #0288d1; font-style: italic; font-weight: 500; animation: blink 1s infinite; }
 @keyframes blink { 0%{opacity:0.2;} 50%{opacity:1;} 100%{opacity:0.2;} }
-.glow {
-    animation: glowEffect 0.5s ease-in-out;
-    border-radius: 10px;
-    background-color: #fff3cd;
-}
-@keyframes glowEffect {
-    0% { box-shadow: 0 0 0px #ffc107; }
-    50% { box-shadow: 0 0 25px #ffc107; }
-    100% { box-shadow: 0 0 0px #ffc107; }
-}
+.glow { animation: glowEffect 0.5s ease-in-out; border-radius: 10px; background-color: #fff3cd; }
+@keyframes glowEffect { 0% { box-shadow: 0 0 0px #ffc107; } 50% { box-shadow: 0 0 25px #ffc107; } 100% { box-shadow: 0 0 0px #ffc107; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -86,78 +71,96 @@ def scroll_to_message(message_id):
     """
     st.components.v1.html(js, height=0)
 
-# === Persistent Past Chats ===
+# === Persistent Past Chats in session_state ===
 if "past_chat_dropdown" not in st.session_state:
     st.session_state.past_chat_dropdown = []
-
 def update_past_chats(question):
     if question not in st.session_state.past_chat_dropdown:
         st.session_state.past_chat_dropdown.insert(0, question)
         if len(st.session_state.past_chat_dropdown) > 10:
             st.session_state.past_chat_dropdown.pop()
-
 def clear_past_chats():
     st.session_state.past_chat_dropdown = []
 
-# === Setup Agent Functions ===
+# === Simple SQLite-backed chat memory (works on Streamlit Cloud) ===
+MEM_DB_PATH = "Dataset/chat_memory.db"
+def ensure_memory_db():
+    os.makedirs(os.path.dirname(MEM_DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(MEM_DB_PATH, check_same_thread=False)
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT,
+        role TEXT,
+        content TEXT,
+        ts REAL
+    )
+    """)
+    conn.commit()
+    return conn
+
+_mem_conn = ensure_memory_db()
+
+def save_message(session_id: str, role: str, content: str):
+    cur = _mem_conn.cursor()
+    cur.execute("INSERT INTO messages (session_id, role, content, ts) VALUES (?, ?, ?, ?)",
+                (session_id, role, content, time.time()))
+    _mem_conn.commit()
+
+def load_recent_messages(session_id: str, limit: int = 10):
+    cur = _mem_conn.cursor()
+    cur.execute("SELECT role, content, ts FROM messages WHERE session_id = ? ORDER BY ts DESC LIMIT ?",
+                (session_id, limit))
+    rows = cur.fetchall()
+    # return newest-last -> oldest-first
+    rows.reverse()
+    return [{"role": r[0], "content": r[1], "ts": r[2]} for r in rows]
+
+# === Setup Agent Functions (we DO NOT pass a LangChain Memory object) ===
 def setup_agent_basic(db_path):
-    os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "hidden_key_basic")  # ← ensure correct key
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "hidden_key_basic")
     db = SQLDatabase.from_uri(f"duckdb:///{db_path}", sample_rows_in_table_info=1)
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", temperature=0.2)
-    chat_history = SQLChatMessageHistory(
-        connection_string="sqlite:///Dataset/chat_memory.db",
-        session_id="user_1"
-    )
-    memory = ConversationBufferMemory(memory_key="chat_history", chat_memory=chat_history, return_messages=True)
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
     prefix = """
-    You are a reasoning SQL analysis agent connected to a DuckDB database.
-    Always follow the ReAct reasoning process.
-    The final output must begin with 'Final Answer:' followed by plain text.
-    """
+You are a reasoning SQL analysis agent connected to a DuckDB database.
+Always follow the ReAct reasoning process.
+The final output must begin with 'Final Answer:' followed by plain text.
+"""
+    # Note: we intentionally do not pass a LangChain memory object; we manage context externally.
     agent = create_sql_agent(
         llm=llm, toolkit=toolkit, verbose=False,
-        handle_parsing_errors=True, memory=memory,
+        handle_parsing_errors=True,
         agent_type="zero-shot-react-description", prefix=prefix
     )
-    return agent, memory
+    return agent
 
 def setup_agent_viz(db_path):
-    os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY_VIZ", "hidden_key_basics")  # ← ensure correct key
+    os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY_VIZ", "hidden_key_basics")
     db = SQLDatabase.from_uri(f"duckdb:///{db_path}", sample_rows_in_table_info=1)
     llm = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", temperature=0.2)
-    memory = ConversationBufferMemory(memory_key="chat_history_viz", return_messages=True)
     toolkit = SQLDatabaseToolkit(db=db, llm=llm)
     prefix = """
-    You are a reasoning SQL visualization agent connected to a DuckDB database.
-    Always follow ReAct reasoning structure:
-    Thought:
-    Action:
-    Action Input:
-    Observation:
-    Thought:
-    Final Answer:
-    Rules:
-    - Use Action: query_sql_db when you need to run a SQL query.
-    - Return the FINAL ANSWER ONLY after reasoning.
-    - Do NOT return JSON, tables, or markdown formatting.
-    - The final output must begin with 'Final Answer:' followed by plain text.
-    """
+You are a reasoning SQL visualization agent connected to a DuckDB database.
+Always follow ReAct reasoning structure. Final output must begin with 'Final Answer:'.
+"""
     agent = create_sql_agent(
         llm=llm, toolkit=toolkit, verbose=False,
-        handle_parsing_errors=True, memory=memory,
+        handle_parsing_errors=True,
         agent_type="zero-shot-react-description", prefix=prefix
     )
-    return agent, memory
+    return agent
 
 # ===============================
 # ===== BASIC CHAT SECTION =====
 # ===============================
 if mode == "🧠 Basic Chat":
     st.markdown("### 💬 Ask your data analysis questions below")
-    agent_basic, memory_basic = setup_agent_basic("D:/Agentic_AI/Dataset/ecommerce_clean.duckdb")
+    agent_basic = setup_agent_basic("D:/Agentic_AI/Dataset/ecommerce_clean.duckdb")
+    session_id = "user_1"
 
-    # === Dataset Dropdown ===
+    # Dataset dropdown
     st.sidebar.markdown("### 🧾 Dataset Overview")
     datasets = {
         "Customers Table": "Dataset/olist_customers_dataset.csv",
@@ -169,7 +172,6 @@ if mode == "🧠 Basic Chat":
         "Sellers Table": "Dataset/olist_sellers_dataset.csv",
         "Geolocation Table": "Dataset/olist_geolocation_dataset.csv",
         "Translation Table": "Dataset/product_category_name_translation.csv"
-        
     }
     selected_dataset = st.sidebar.selectbox("Select table to preview:", ["None"] + list(datasets.keys()))
     if selected_dataset != "None":
@@ -179,23 +181,14 @@ if mode == "🧠 Basic Chat":
         except Exception as e:
             st.error(f"⚠️ Could not load {selected_dataset}: {e}")
 
-    # === Past Chats Sidebar ===
-    
+    # Past chats
     st.sidebar.markdown("### 💬 Past Chats")
     selected_past = st.sidebar.selectbox("Select previous question:", ["None"] + st.session_state.past_chat_dropdown, key="basic_past")
-
     if st.sidebar.button("🧹 Clear Past Chats", key="clear_basic"):
         clear_past_chats()
         st.sidebar.success("Cleared sidebar history (DB memory remains intact).")
 
-    # Auto-scroll to the selected past message
-    if selected_past != "None":
-        for idx, (role, msg) in enumerate(st.session_state.chat_history_basic):
-            if role == "user" and selected_past.strip() == msg.strip():
-                scroll_to_message(f"msg_basic_{idx}")
-                break
-
-    # === Summarizer ===
+    # Summarizer helper
     def summarize_output(text):
         try:
             summarizer = ChatGoogleGenerativeAI(model="models/gemini-2.5-flash", temperature=0.3)
@@ -204,17 +197,13 @@ if mode == "🧠 Basic Chat":
         except Exception:
             return "<div class='summary-text'>(No summary generated.)</div>"
 
-    # === Memory-aware Query ===
+    # Memory-aware ask
     def ask_brain(query: str):
         try:
-            past = memory_basic.load_memory_variables({})
-            memory_context = ""
-            if "chat_history" in past and past["chat_history"]:
-                msgs = past["chat_history"][-6:]
-                memory_context = "\n".join([f"{m.type.upper()}: {m.content}" for m in msgs])
-
+            recent = load_recent_messages(session_id, limit=8)
+            memory_context = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent]) if recent else "No prior conversation."
             contextual_prompt = f"""
-You are a precise SQL data analyst AI with perfect memory.
+You are a precise SQL data analyst AI.
 
 Conversation history:
 {memory_context}
@@ -226,6 +215,8 @@ Rules:
 - Base your reasoning on prior context if relevant.
 - Use SQL only for real tables.
 - Keep answers concise and factual.
+
+Please answer and if you run SQL, include queries and outputs in your chain-of-thought, but the FINAL ANSWER should be prefixed with 'Final Answer:'.
 """
             response = agent_basic.invoke({"input": contextual_prompt}, return_intermediate_steps=True)
             answer = response.get("output", str(response))
@@ -233,13 +224,15 @@ Rules:
             parts = re.split(r'\s*[;,]\s*', cleaned)
             final_text = "\n".join(parts) if len(parts) > 1 else cleaned
             summary = summarize_output(final_text)
-            memory_basic.save_context({"input": query}, {"output": final_text})
+            # save messages to our sqlite memory
+            save_message(session_id, "user", query)
+            save_message(session_id, "assistant", final_text)
             update_past_chats(query)
             return f"{final_text}\n\n💡 Insight:\n{summary}"
         except Exception as e:
             return f"⚠️ Error: {e}"
 
-    # === Chat Display ===
+    # Chat display using session_state lists (UI only)
     if "chat_history_basic" not in st.session_state:
         st.session_state.chat_history_basic = []
 
@@ -264,33 +257,32 @@ Rules:
 # ===============================
 else:
     st.markdown("### 📊 Ask for visualizations and insights")
-    agent_viz, memory_viz = setup_agent_viz("D:/Agentic_AI/Dataset/ecommerce_file.duckdb")
+    agent_viz = setup_agent_viz("D:/Agentic_AI/Dataset/ecommerce_file.duckdb")
+    session_id_viz = "user_1_viz"
 
     st.sidebar.markdown("### 📁 Available Charts")
     st.sidebar.info("Bar, Line, Pie, Area, Histogram, Radar, Donut, Polar")
 
-    # === Past Chats Sidebar ===
     st.sidebar.markdown("### 💬 Past Chats")
     selected_past = st.sidebar.selectbox("Select previous question:", ["None"] + st.session_state.past_chat_dropdown, key="viz_past")
-
     if st.sidebar.button("🧹 Clear Past Chats", key="clear_viz"):
         clear_past_chats()
         st.sidebar.success("Cleared sidebar history (DB memory remains intact).")
 
-    # Auto-scroll to the selected past message
-    if selected_past != "None":
-        for idx, (role, msg) in enumerate(st.session_state.chat_history_viz):
-            if role == "user" and selected_past.strip() == msg.strip():
-                scroll_to_message(f"msg_viz_{idx}")
-                break
-    # === Visualization Function ===
     def ask_with_viz(query):
         try:
+            # include recent viz memory
+            recent = load_recent_messages(session_id_viz, limit=6)
+            memory_context = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent]) if recent else ""
             enforced_prompt = f"""
-            You are a SQL visualization assistant.
-            User: {query}
-            Return ONLY Label: Value pairs (no markdown/bullets).
-            """
+You are a SQL visualization assistant.
+Conversation context:
+{memory_context}
+
+User request: {query}
+
+Return ONLY Label: Value pairs (no markdown/bullets). Provide numeric outputs suitable for plotting.
+"""
             resp = agent_viz.invoke({"input": enforced_prompt})
             text = resp.get("output", str(resp))
             pairs = re.findall(r"\s*([\w\s&:/\-\(\)\d]+):\s*([\d,.]+)", text)
@@ -309,9 +301,10 @@ else:
             if chart_type=="area": cfg["options"]["elements"]={"line":{"fill":True}}
             chart_url = f"https://quickchart.io/chart?c={requests.utils.quote(json.dumps(cfg))}"
             summary_prompt = f"Summarize these results (3 concise analytical lines):\n{text}"
-            summary = agent_viz.invoke({"input": summary_prompt})
-            summary_text = summary.get("output", str(summary))
-            memory_viz.save_context({"input": query}, {"output": summary_text})
+            summary_resp = agent_viz.invoke({"input": summary_prompt})
+            summary_text = summary_resp.get("output", str(summary_resp))
+            save_message(session_id_viz, "user", query)
+            save_message(session_id_viz, "assistant", summary_text)
             update_past_chats(query)
             return f"🖼️ Chart:\n![]({chart_url})\n\n💡 Insight:\n{summary_text}"
         except Exception as e:
@@ -335,4 +328,3 @@ else:
         st.chat_message("assistant").markdown(reply, unsafe_allow_html=True)
         st.session_state.chat_history_viz.append(("user", prompt))
         st.session_state.chat_history_viz.append(("assistant", reply))
-
