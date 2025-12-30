@@ -311,7 +311,7 @@ from langchain.memory import ConversationBufferMemory
 # =====================================================
 # ================== API KEY ==========================
 # =====================================================
-os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY # from .env
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "hidden_key_basic") # from .env
 
 
 # =====================================================
